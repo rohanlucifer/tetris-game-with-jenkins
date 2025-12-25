@@ -1,52 +1,63 @@
 pipeline {
     agent any
+
+    environment {
+        KUBECONFIG = credentials('kubeconfig')
+    }
+
     stages {
-        stage('Set KUBECONFIG & Check Nodes') {
+
+        stage('Verify Workspace') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    sh 'kubectl get nodes'
+                sh '''
+                pwd
+                ls -la
+                '''
+            }
+        }
+
+        stage('Verify Cluster Access') {
+            steps {
+                sh '''
+                kubectl get nodes
+                '''
+            }
+        }
+
+        stage('Deploy Tetris Application') {
+            steps {
+                dir('tetris-game-with-jenkins') {
+                    sh '''
+                    kubectl apply -f deploy.yaml
+                    kubectl wait --for=condition=Ready pod -l app=tetris --timeout=120s
+                    kubectl get pods
+                    '''
                 }
             }
         }
 
-        stage('Deploy Tetris Game') {
+        stage('Install MetalLB') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game-with-jenkins') {
-                        sh '''
-                        kubectl apply -f deploy.yaml
-                        kubectl wait --for=condition=Ready --timeout=60s -l app=tetris pod
-                        kubectl get all
-                        '''
-                    }
-                }
-            }
-        }
+                dir('tetris-game-with-jenkins') {
+                    sh '''
+                    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
 
-        stage('Setup MetalLB') {
-            steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game-with-jenkins') {
-                        sh '''
-                        kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
-                        kubectl wait --for=condition=Ready --timeout=60s -l app=metallb pod -n metallb-system
-                        kubectl apply -f metallb.yaml
-                        kubectl get all -n metallb-system
-                        '''
-                    }
+                    kubectl wait --for=condition=Ready pod -n metallb-system -l app=metallb --timeout=120s
+
+                    kubectl apply -f metallb.yaml
+                    kubectl get pods -n metallb-system
+                    '''
                 }
             }
         }
 
         stage('Apply Ingress') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game-with-jenkins') {
-                        sh '''
-                        kubectl apply -f ingress.yaml
-                        kubectl get ing
-                        '''
-                    }
+                dir('tetris-game-with-jenkins') {
+                    sh '''
+                    kubectl apply -f ingress.yaml
+                    kubectl get ingress
+                    '''
                 }
             }
         }
