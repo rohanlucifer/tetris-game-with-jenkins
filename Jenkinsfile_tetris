@@ -1,18 +1,30 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         KUBECONFIG = credentials('kubeconfig')
     }
 
     stages {
 
-        stage('Verify Workspace') {
+        stage('Clone Repository') {
             steps {
-                sh '''
-                pwd
-                ls -la
-                '''
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-secret',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh '''
+                    rm -rf tetris-game-with-jenkins
+                    git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/rohanlucifer/tetris-game-with-jenkins.git
+                    '''
+                }
             }
         }
 
@@ -41,9 +53,7 @@ pipeline {
                 dir('tetris-game-with-jenkins') {
                     sh '''
                     kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
-
                     kubectl wait --for=condition=Ready pod -n metallb-system -l app=metallb --timeout=120s
-
                     kubectl apply -f metallb.yaml
                     kubectl get pods -n metallb-system
                     '''
