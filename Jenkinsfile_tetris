@@ -28,11 +28,49 @@ pipeline {
             }
         }
 
-        stage('Verify Cluster Access') {
+        stage('Verify Kubernetes Access') {
             steps {
                 sh '''
                 kubectl get nodes
+                kubectl cluster-info
                 '''
+            }
+        }
+
+        stage('Install Ingress-NGINX Controller') {
+            steps {
+                sh '''
+                kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.3.1/deploy/static/provider/cloud/deploy.yaml
+
+                kubectl wait -n ingress-nginx \
+                  --for=condition=Ready pod \
+                  -l app.kubernetes.io/component=controller \
+                  --timeout=180s
+                '''
+            }
+        }
+
+        stage('Install MetalLB') {
+            steps {
+                sh '''
+                kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
+
+                kubectl wait -n metallb-system \
+                  --for=condition=Ready pod \
+                  -l app=metallb \
+                  --timeout=180s
+                '''
+            }
+        }
+
+        stage('Configure MetalLB IP Pool') {
+            steps {
+                dir('tetris-game-with-jenkins') {
+                    sh '''
+                    kubectl apply -f metallb.yaml
+                    kubectl get ipaddresspool -n metallb-system
+                    '''
+                }
             }
         }
 
@@ -41,21 +79,14 @@ pipeline {
                 dir('tetris-game-with-jenkins') {
                     sh '''
                     kubectl apply -f deploy.yaml
-                    kubectl wait --for=condition=Ready pod -l app=tetris --timeout=120s
-                    kubectl get pods
-                    '''
-                }
-            }
-        }
 
-        stage('Install MetalLB') {
-            steps {
-                dir('tetris-game-with-jenkins') {
-                    sh '''
-                    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
-                    kubectl wait --for=condition=Ready pod -n metallb-system -l app=metallb --timeout=120s
-                    kubectl apply -f metallb.yaml
-                    kubectl get pods -n metallb-system
+                    kubectl wait \
+                      --for=condition=Ready pod \
+                      -l app=tetris \
+                      --timeout=180s
+
+                    kubectl get pods
+                    kubectl get svc
                     '''
                 }
             }
@@ -70,6 +101,15 @@ pipeline {
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo 'Deployment completed successfully'
+        }
+        failure {
+            echo 'Deployment failed – check logs'
         }
     }
 }
