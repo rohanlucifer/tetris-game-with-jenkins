@@ -13,7 +13,7 @@ pipeline {
 
         stage('Set KUBECONFIG & Check Nodes') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
                     sh 'kubectl get nodes'
                 }
             }
@@ -21,8 +21,8 @@ pipeline {
 
         stage('Deploy Tetris Game') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game') {
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    dir('tetris-game-with-jenkins') {
                         sh '''
                         kubectl apply -f deploy.yaml
                         kubectl wait --for=condition=Ready --timeout=60s -l app=tetris pod
@@ -35,8 +35,8 @@ pipeline {
 
         stage('Setup MetalLB') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game') {
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    dir('tetris-game-with-jenkins') {
                         sh '''
                         kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
                         kubectl wait --for=condition=Ready --timeout=60s -l app=metallb pod -n metallb-system
@@ -50,8 +50,8 @@ pipeline {
 
         stage('Apply Ingress') {
             steps {
-                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
-                    dir('tetris-game') {
+                withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
+                    dir('tetris-game-with-jenkins') {
                         sh '''
                         kubectl apply -f ingress.yaml
                         kubectl get ing
