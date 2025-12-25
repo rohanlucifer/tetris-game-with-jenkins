@@ -1,16 +1,6 @@
 pipeline {
     agent any
     stages {
-        stage('Checkout from GitHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'github-secret', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
-                    sh '''
-                    git clone https://$GIT_USER:$GIT_TOKEN@github.com/rohanlucifer/tetris-game-with-jenkins.git
-                    '''
-                }
-            }
-        }
-
         stage('Set KUBECONFIG & Check Nodes') {
             steps {
                 withCredentials([file(credentialsId: 'kubeconfig', variable: 'KUBECONFIG')]) {
