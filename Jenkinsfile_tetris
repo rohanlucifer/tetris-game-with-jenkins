@@ -1,0 +1,65 @@
+pipeline {
+    agent any
+    stages {
+        stage('Checkout from GitHub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'github-secret', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh '''
+                    git clone https://$GIT_USER:$GIT_TOKEN@github.com/your-org/tetris-game.git
+                    cd tetris-game
+                    '''
+                }
+            }
+        }
+
+        stage('Set KUBECONFIG & Check Nodes') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    echo "Using kubeconfig: $KUBECONFIG"
+                    kubectl get nodes
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy Tetris Game') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    cd tetris-game
+                    kubectl apply -f deploy.yaml
+                    kubectl wait --for=condition=Ready --timeout=60s -l app=tetris pod
+                    kubectl get all
+                    '''
+                }
+            }
+        }
+
+        stage('Setup MetalLB') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    cd tetris-game
+                    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.5/config/manifests/metallb-native.yaml
+                    kubectl wait --for=condition=Ready --timeout=60s -l app=metallb pod -n metallb-system
+                    kubectl apply -f metallb.yaml
+                    kubectl get all -n metallb-system
+                    '''
+                }
+            }
+        }
+
+        stage('Apply Ingress') {
+            steps {
+                withCredentials([file(credentialsId: 'kubeconfig-secret', variable: 'KUBECONFIG')]) {
+                    sh '''
+                    cd tetris-game
+                    kubectl apply -f ingress.yaml
+                    kubectl get ing
+                    '''
+                }
+            }
+        }
+    }
+}
